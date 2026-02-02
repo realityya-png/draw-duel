@@ -1,0 +1,15 @@
+body {
+  font-family: sans-serif;
+  text-align: center;
+  background: #f5f5f5;
+}
+
+canvas {
+  border: 2px solid #333;
+  background: #fff;
+  cursor: crosshair;
+}
+
+.tools {
+  margin-top: 10px;
+}
