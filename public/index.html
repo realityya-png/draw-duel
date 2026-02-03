@@ -1,23 +1,25 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-  <meta charset="UTF-8" />
-  <title>Draw Duel</title>
- <link rel="stylesheet" href="/style.css" />
+    <meta charset="UTF-8">
+    <title>Draw Duel — Вход</title>
+    <link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <h1>🎨 Draw Duel</h1>
+    <h1>🎨 Draw Duel</h1>
 
-  <canvas id="canvas" width="500" height="500"></canvas>
+    <h2>Регистрация</h2>
+    <form action="/register" method="POST">
+        <input name="nickname" placeholder="Ник" required>
+        <input name="password" type="password" placeholder="Пароль" required>
+        <button>Регистрация</button>
+    </form>
 
-  <div class="tools">
-    <input type="color" id="colorPicker" value="#000000" />
-    <button id="clear">Очистить</button>
-	<button id="finish">Завершить</button>
-    <button id="replay">Воспроизвести</button>
-	<input id="word" placeholder="Введите слово" />
-  </div>
-
- <script src="/app.js"></script>
+    <h2>Логин</h2>
+    <form action="/login" method="POST">
+        <input name="nickname" placeholder="Ник" required>
+        <input name="password" type="password" placeholder="Пароль" required>
+        <button>Войти</button>
+    </form>
 </body>
 </html>

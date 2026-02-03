@@ -2,87 +2,24 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <title>Угадай рисунок!</title>
+    <title>Draw Duel — Угадай рисунок</title>
     <link rel="stylesheet" href="/style.css">
 </head>
 <body>
     <h1>🤔 Что рисует художник?</h1>
-    <canvas id="canvas" width="500" height="500" style="border: 3px solid #333; background: white;"></canvas>
-
+    <canvas id="canvas" width="500" height="500" style="border:3px solid #333; background:white;"></canvas>
+    <input id="guess" placeholder="Ваш вариант" />
+    <button id="guessBtn">Угадать</button>
+    <p id="result"></p> 
     <div class="tools">
         <button id="playBtn">▶ Смотреть рисунок</button>
-        <div id="guessZone" style="margin-top: 20px;">
-            <input type="text" id="userGuess" placeholder="Ваш ответ...">
+        <button id="skipBtn">⏩ Пропустить</button>
+        <div id="guessZone">
+            <input type="text" id="userGuess" placeholder="Ваш ответ">
             <button id="checkBtn">Проверить</button>
         </div>
-        <p id="feedback" style="font-weight: bold; font-size: 20px;"></p>
+        <p id="feedback" style="font-weight:bold; font-size:20px;"></p>
     </div>
-
-    <script>
-        const canvas = document.getElementById("canvas");
-        const ctx = canvas.getContext("2d");
-        let correctWord = ""; // правильное слово
-
-        // Получаем id рисунка из URL
-        const drawingId = window.location.pathname.split("/").pop();
-
-        let drawingData = null;
-
-        // Загружаем рисунок по API
-        async function loadDrawing() {
-            try {
-                const res = await fetch(`/api/draw/${drawingId}`);
-                if (!res.ok) throw new Error("Рисунок не найден");
-                drawingData = await res.json();
-                correctWord = drawingData.word.toLowerCase().trim();
-            } catch (err) {
-                alert(err.message);
-            }
-        }
-
-        // Воспроизведение рисунка на canvas
-        function playDrawing() {
-            if (!drawingData) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            let i = 0;
-            function step() {
-                if (i >= drawingData.timeline.length) return;
-                const p = drawingData.timeline[i];
-                if (p.type === "start") {
-                    ctx.beginPath();
-                    ctx.strokeStyle = p.color;
-                    ctx.lineWidth = 4;
-                    ctx.lineCap = "round";
-                    ctx.moveTo(p.x, p.y);
-                } else if (p.type === "draw") {
-                    ctx.lineTo(p.x, p.y);
-                    ctx.stroke();
-                }
-                i++;
-                setTimeout(step, 10);
-            }
-            step();
-        }
-
-        // Кнопка «Смотреть рисунок»
-        document.getElementById("playBtn").onclick = playDrawing;
-
-        // Кнопка «Проверить слово»
-        document.getElementById("checkBtn").onclick = () => {
-            const guess = document.getElementById("userGuess").value.toLowerCase().trim();
-            const feedback = document.getElementById("feedback");
-
-            if (guess === correctWord) {
-                feedback.innerText = "✅ Верно! Это " + correctWord.toUpperCase();
-                feedback.style.color = "green";
-            } else {
-                feedback.innerText = "❌ Нет, попробуй еще раз!";
-                feedback.style.color = "red";
-            }
-        };
-
-        // Загружаем рисунок при открытии страницы
-        loadDrawing();
-    </script>
+    <script src="/view.js"></script>
 </body>
 </html>

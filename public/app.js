@@ -1,91 +1,86 @@
 const canvas = document.getElementById("canvas");
 const ctx = canvas.getContext("2d");
 
-let drawing = [];
-let drawingColor = document.getElementById("colorPicker").value;
-let isDrawing = false;
-
-// --- Рисование на canvas ---
-canvas.addEventListener("mousedown", (e) => {
-    isDrawing = true;
-    const x = e.offsetX;
-    const y = e.offsetY;
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-
-    drawing.push({ type: "start", x, y, color: drawingColor });
-});
-
-canvas.addEventListener("mousemove", (e) => {
-    if (!isDrawing) return;
-    const x = e.offsetX;
-    const y = e.offsetY;
-    ctx.lineTo(x, y);
-    ctx.strokeStyle = drawingColor;
-    ctx.lineWidth = 4;
-    ctx.lineCap = "round";
-    ctx.stroke();
-
-    drawing.push({ type: "draw", x, y });
-});
-
-canvas.addEventListener("mouseup", () => {
-    isDrawing = false;
-});
-
-canvas.addEventListener("mouseout", () => {
-    isDrawing = false;
-});
+let drawing = false;
+let timeline = [];
+let currentColor = "#000000";
 
 // --- Инструменты ---
-document.getElementById("colorPicker").addEventListener("change", (e) => {
-    drawingColor = e.target.value;
+document.getElementById("colorPicker").addEventListener("change", e => {
+    currentColor = e.target.value;
 });
 
 document.getElementById("clear").addEventListener("click", () => {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    drawing = [];
+    timeline = [];
 });
 
-// --- Кнопка «Воспроизвести» (локально) ---
-document.getElementById("replay").addEventListener("click", () => {
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    let i = 0;
-    function step() {
-        if (i >= drawing.length) return;
-        const p = drawing[i];
-        if (p.type === "start") {
-            ctx.beginPath();
-            ctx.strokeStyle = p.color;
-            ctx.lineWidth = 4;
-            ctx.lineCap = "round";
-            ctx.moveTo(p.x, p.y);
-        } else if (p.type === "draw") {
-            ctx.lineTo(p.x, p.y);
-            ctx.stroke();
-        }
-        i++;
-        setTimeout(step, 10);
-    }
-    step();
+canvas.addEventListener("mousedown", e => {
+    drawing = true;
+    ctx.beginPath();
+    ctx.strokeStyle = currentColor;
+    ctx.lineWidth = 4;
+    ctx.lineCap = "round";
+
+    ctx.moveTo(e.offsetX, e.offsetY);
+    timeline.push({
+        type: "start",
+        x: e.offsetX,
+        y: e.offsetY,
+        color: currentColor
+    });
 });
 
-// --- Кнопка «Завершить» ---
+canvas.addEventListener("mousemove", e => {
+    if (!drawing) return;
+    ctx.lineTo(e.offsetX, e.offsetY);
+    ctx.stroke();
+    timeline.push({
+        type: "draw",
+        x: e.offsetX,
+        y: e.offsetY
+    });
+});
+
+canvas.addEventListener("mouseup", () => {
+    if (!drawing) return;
+    drawing = false;
+
+    timeline.push({
+        type: "end"
+    });
+});
+
+canvas.addEventListener("mouseleave", () => {
+    if (!drawing) return;
+    drawing = false;
+
+    timeline.push({
+        type: "end"
+    });
+});
+
+// --- Завершение рисунка ---
 document.getElementById("finish").addEventListener("click", async () => {
-    const word = document.getElementById("word").value.trim();
+    const word = window.currentWord;
+
     if (!word) {
-        alert("Введите слово!");
+        alert("Слово не загружено");
         return;
     }
 
-    // Отправляем рисунок на сервер
+    if (timeline.length === 0) {
+        alert("Нарисуйте что-нибудь!");
+        return;
+    }
+
     const res = await fetch("/api/draw", {
         method: "POST",
+        credentials: "same-origin",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ timeline: drawing, word }),
+        body: JSON.stringify({ timeline, word })
     });
-    const data = await res.json();
 
-    // Перенаправляем на страницу просмотра
+    const data = await res.json();
     window.location.href = `/view/${data.id}`;
 });

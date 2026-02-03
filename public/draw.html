@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Draw Duel — Рисование</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <h1>🎨 Нарисуй слово</h1>
+
+    <!-- СЛОВО ОТ СЕРВЕРА -->
+    <h2 id="word">Загрузка слова...</h2>
+
+    <canvas id="canvas" width="500" height="500"
+        style="border:3px solid #333; background:white;"></canvas>
+
+    <div class="tools">
+        <input type="color" id="colorPicker" value="#000000">
+        <button id="clear">Очистить</button>
+        <button id="finish">Завершить</button>
+    </div>
+
+    <!-- ПОРЯДОК ВАЖЕН -->
+    <script src="/draw.js"></script>
+    <script src="/app.js"></script>
+</body>
+</html>

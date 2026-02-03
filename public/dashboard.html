@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Draw Duel — Dashboard</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <h1>Добро пожаловать!</h1>
+    <div class="dashboard">
+        <a href="draw.html">🎨 Нарисовать</a>
+        <a href="available.html">🤔 Угадать рисунок</a>
+        <a href="leaderboard.html">🏆 Рейтинг</a>
+    </div>
+	<h2>Мои рисунки</h2>
+<ul id="myDrawings"></ul>
+
+<script>
+fetch("/api/my-drawings")
+  .then(res => res.json())
+  .then(drawings => {
+    const list = document.getElementById("myDrawings");
+
+    if (drawings.length === 0) {
+      list.innerHTML = "<li>У вас пока нет рисунков</li>";
+      return;
+    }
+
+    drawings.forEach(d => {
+      const li = document.createElement("li");
+      li.innerHTML = `
+        <b>${d.word}</b>
+        <small>(${new Date(d.createdAt).toLocaleString()})</small>
+      `;
+      list.appendChild(li);
+    });
+  });
+</script>
+
+</body>
+</html>
