@@ -14,6 +14,13 @@ const WORDS = JSON.parse(
     fs.readFileSync("./words/nouns.json", "utf-8")
 );
 
+import pool from "./db.js";
+
+pool.query("SELECT 1")
+  .then(() => console.log("✅ PostgreSQL connected"))
+  .catch(err => console.error("❌ PostgreSQL error", err));
+
+
 /* ---------------- Middleware ---------------- */
 
 app.use(bodyParser.json());
