@@ -158,16 +158,18 @@ app.post("/api/draw", async (req, res) => {
 
     const id = uuidv4();
 
+    // Сериализация timeline перед вставкой
     await pool.query(
         `
         INSERT INTO drawings (id, user_id, timeline, word)
         VALUES ($1, $2, $3, $4)
         `,
-        [id, req.session.userId, timeline, word]
+        [id, req.session.userId, JSON.stringify(timeline), word]
     );
 
     res.json({ success: true, id });
 });
+
 
 app.get("/api/my-drawings", async (req, res) => {
     if (!req.session.userId)
@@ -196,7 +198,7 @@ app.get("/api/available-drawings", async (req, res) => {
         FROM drawings d
         JOIN users u ON d.user_id = u.id
         WHERE d.user_id != $1
-          AND NOT ($1 = ANY(d.guessed_by))
+          AND NOT ($1 = ANY(COALESCE(d.guessed_by, '{}')))
         ORDER BY d.created_at DESC
         `,
         [req.session.userId]
