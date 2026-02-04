@@ -166,13 +166,18 @@ app.post("/api/draw", async (req, res) => {
 
     const id = uuidv4();
 
-    await pool.query(
-        `
-        INSERT INTO drawings (id, user_id, timeline, word)
-        VALUES ($1,$2,$3,$4)
-        `,
-        [id, req.session.userId, timeline, word]
-    );
+   await pool.query(
+    `
+    INSERT INTO drawings (id, user_id, timeline, word)
+    VALUES ($1,$2,$3::jsonb,$4)
+    `,
+    [
+        id,
+        req.session.userId,
+        JSON.stringify(timeline),
+        word
+    ]
+);
 
     res.json({ id });
 });
@@ -218,7 +223,9 @@ app.post("/api/guess/:id", async (req, res) => {
     if (d.user_id === userId)
         return res.status(403).json({ error: "Свой рисунок" });
 
-    const guessedBy = d.guessed_by || [];
+    const guessedBy = Array.isArray(d.guessed_by)
+    ? d.guessed_by
+    : [];
     if (guessedBy.includes(userId))
         return res.status(403).json({ error: "Уже угадал" });
 
