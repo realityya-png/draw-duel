@@ -8,18 +8,11 @@ const { v4: uuidv4 } = require("uuid");
 const app = express();
 const PORT = 3000;
 
-const WORDS = [
-    "кот",
-    "собака",
-    "машина",
-    "дом",
-    "дерево",
-    "самолёт",
-    "телефон",
-    "чашка",
-    "рыба",
-    "велосипед"
-];
+const fs = require("fs");
+
+const WORDS = JSON.parse(
+    fs.readFileSync("./words/nouns.json", "utf-8")
+);
 
 /* ---------------- Middleware ---------------- */
 
@@ -289,4 +282,15 @@ app.listen(PORT, () =>
 app.get("/word", (req, res) => {
     const word = WORDS[Math.floor(Math.random() * WORDS.length)];
     res.json({ word });
+});
+
+function getRandomWords(arr, count = 3) {
+    const shuffled = [...arr].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
+}
+
+app.get("/api/words", (req, res) => {
+    const pool = WORDS.easy; // пока только easy
+    const words = getRandomWords(pool, 3);
+    res.json({ words });
 });
