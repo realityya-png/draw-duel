@@ -157,29 +157,23 @@ app.get("/api/words", (_, res) => {
 });
 
 app.post("/api/draw", async (req, res) => {
-    if (!req.session.userId)
+     if (!req.session.userId) {
         return res.status(401).json({ error: "Не авторизован" });
+    }
 
-    const { timeline, word } = req.body;
-    if (!timeline || !word)
-        return res.status(400).json({ error: "Плохие данные" });
+    const { rows } = await pool.query(
+        `
+        SELECT d.id, u.nickname
+        FROM drawings d
+        JOIN users u ON d.user_id = u.id
+        WHERE d.user_id != $1
+          AND NOT ($1 = ANY(d.guessed_by))
+        ORDER BY d.created_at DESC
+        `,
+        [req.session.userId]
+    );
 
-    const id = uuidv4();
-
-   await pool.query(
-    `
-    INSERT INTO drawings (id, user_id, timeline, word)
-    VALUES ($1,$2,$3::jsonb,$4)
-    `,
-    [
-        id,
-        req.session.userId,
-        JSON.stringify(timeline),
-        word
-    ]
-);
-
-    res.json({ id });
+    res.json(rows);
 });
 
 app.get("/api/draw/:id", async (req, res) => {
