@@ -146,42 +146,33 @@ app.get("/api/words", (_, res) => {
 });
 
 app.post("/api/draw", async (req, res) => {
-    if (!req.session.userId) {
+    if (!req.session.userId)
         return res.status(401).json({ error: "Не авторизован" });
-    }
 
     const { timeline, word } = req.body;
-
-    if (!timeline || !word) {
+    if (!timeline || !word)
         return res.status(400).json({ error: "Нет данных" });
-    }
 
     const id = uuidv4();
 
-    // Сериализация timeline перед вставкой
     await pool.query(
-        `
-        INSERT INTO drawings (id, user_id, timeline, word)
-        VALUES ($1, $2, $3, $4)
-        `,
+        `INSERT INTO drawings (id, user_id, timeline, word)
+         VALUES ($1, $2, $3, $4)`,
         [id, req.session.userId, JSON.stringify(timeline), word]
     );
 
     res.json({ success: true, id });
 });
 
-
 app.get("/api/my-drawings", async (req, res) => {
     if (!req.session.userId)
         return res.status(401).json({ error: "Не авторизован" });
 
     const { rows } = await pool.query(
-        `
-        SELECT id, word, created_at
-        FROM drawings
-        WHERE user_id = $1
-        ORDER BY created_at DESC
-        `,
+        `SELECT id, word, created_at
+         FROM drawings
+         WHERE user_id = $1
+         ORDER BY created_at DESC`,
         [req.session.userId]
     );
 
@@ -193,14 +184,12 @@ app.get("/api/available-drawings", async (req, res) => {
         return res.status(401).json({ error: "Не авторизован" });
 
     const { rows } = await pool.query(
-        `
-        SELECT d.id, u.nickname
-        FROM drawings d
-        JOIN users u ON d.user_id = u.id
-        WHERE d.user_id != $1
-          AND NOT ($1 = ANY(COALESCE(d.guessed_by, '{}')))
-        ORDER BY d.created_at DESC
-        `,
+        `SELECT d.id, u.nickname
+         FROM drawings d
+         JOIN users u ON d.user_id = u.id
+         WHERE d.user_id != $1
+           AND NOT ($1 = ANY(COALESCE(d.guessed_by, '{}')))
+         ORDER BY d.created_at DESC`,
         [req.session.userId]
     );
 
