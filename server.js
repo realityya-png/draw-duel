@@ -183,18 +183,29 @@ app.get("/api/available-drawings", async (req, res) => {
     if (!req.session.userId)
         return res.status(401).json({ error: "Не авторизован" });
 
-    const { rows } = await pool.query(
-        `SELECT d.id, u.nickname
-         FROM drawings d
-         JOIN users u ON d.user_id = u.id
-         WHERE d.user_id != $1
-           AND NOT ($1 = ANY(COALESCE(d.guessed_by, '{}')))
-         ORDER BY d.created_at DESC`,
-        [req.session.userId]
-    );
+    try {
+        const { rows } = await pool.query(
+            `
+            SELECT d.id, u.nickname
+            FROM drawings d
+            JOIN users u ON d.user_id = u.id
+            WHERE d.user_id != $1
+              AND NOT ($1 = ANY(CASE 
+                                   WHEN d.guessed_by IS NULL THEN '{}'
+                                   ELSE d.guessed_by
+                                 END))
+            ORDER BY d.created_at DESC
+            `,
+            [req.session.userId]
+        );
 
-    res.json(rows);
+        res.json(rows);
+    } catch (err) {
+        console.error("Ошибка при получении доступных рисунков:", err);
+        res.status(500).json({ error: "Ошибка сервера" });
+    }
 });
+
 
 app.get("/api/draw/:id", async (req, res) => {
     const userId = req.session.userId;
