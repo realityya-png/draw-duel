@@ -1,104 +1,116 @@
-const express = require("express");
-const path = require("path");
-const bcrypt = require("bcrypt");
-const sqlite3 = require("sqlite3").verbose();
-const session = require("express-session");
-const bodyParser = require("body-parser");
-const { v4: uuidv4 } = require("uuid");
-const app = express();
-const PORT = 3000;
-
-const fs = require("fs");
-
-const WORDS = JSON.parse(
-    fs.readFileSync("./words/nouns.json", "utf-8")
-);
+import express from "express";
+import session from "express-session";
+import bcrypt from "bcrypt";
+import bodyParser from "body-parser";
+import { v4 as uuidv4 } from "uuid";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
 import pool from "./db.js";
 
-pool.query("SELECT 1")
-  .then(() => console.log("✅ PostgreSQL connected"))
-  .catch(err => console.error("❌ PostgreSQL error", err));
+/* ---------------- Setup ---------------- */
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+/* ---------------- Words ---------------- */
+
+const WORDS = JSON.parse(
+    fs.readFileSync(path.join(__dirname, "words/nouns.json"), "utf-8")
+);
+
+function getRandomWords(arr, count = 3) {
+    const shuffled = [...arr].sort(() => 0.5 - Math.random());
+    return shuffled.slice(0, count);
+}
 
 /* ---------------- Middleware ---------------- */
 
 app.use(bodyParser.json());
 app.use(bodyParser.urlencoded({ extended: true }));
 
-app.use(session({
-    name: "drawduel.sid",
-    secret: "drawduel_secret_key",
-    resave: false,
-    saveUninitialized: false,
-    cookie: {
-        httpOnly: true,
-        sameSite: "lax",
-        maxAge: 1000 * 60 * 60 * 24
-    }
-}));
+app.use(
+    session({
+        name: "drawduel.sid",
+        secret: "drawduel_secret_key",
+        resave: false,
+        saveUninitialized: false,
+        cookie: {
+            httpOnly: true,
+            sameSite: "lax",
+            maxAge: 1000 * 60 * 60 * 24
+        }
+    })
+);
 
 app.use(express.static(path.join(__dirname, "public")));
 
-/* ---------------- Database ---------------- */
+/* ---------------- Database init ---------------- */
 
-const db = new sqlite3.Database("./database.db", err => {
-    if (err) console.error(err);
-    else console.log("База данных подключена");
-});
+(async () => {
+    try {
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS users (
+                id SERIAL PRIMARY KEY,
+                nickname TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                points INTEGER DEFAULT 0,
+                role TEXT DEFAULT 'user'
+            )
+        `);
 
-db.serialize(() => {
-    db.run(`
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nickname TEXT UNIQUE,
-            password TEXT,
-            points INTEGER DEFAULT 0
-        )
-    `);
+        await pool.query(`
+            CREATE TABLE IF NOT EXISTS drawings (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER REFERENCES users(id),
+                timeline JSONB NOT NULL,
+                word TEXT NOT NULL,
+                guessed_by JSONB DEFAULT '[]',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
 
-    db.run(`
-        CREATE TABLE IF NOT EXISTS drawings (
-            id TEXT PRIMARY KEY,
-            userId INTEGER,
-            timeline TEXT,
-            word TEXT,
-            guessedBy TEXT DEFAULT '[]',
-            createdAt DATETIME DEFAULT CURRENT_TIMESTAMP
-        )
-    `);
-});
+        console.log("✅ PostgreSQL connected & tables ready");
+    } catch (err) {
+        console.error("❌ DB init error", err);
+    }
+})();
 
 /* ---------------- Pages ---------------- */
 
 app.get("/", (_, res) =>
-    res.sendFile("index.html", { root: "public" })
+    res.sendFile(path.join(__dirname, "public/index.html"))
 );
 
 app.get("/dashboard", (req, res) => {
     if (!req.session.userId) return res.redirect("/");
-    res.sendFile("dashboard.html", { root: "public" });
+    res.sendFile(path.join(__dirname, "public/dashboard.html"));
 });
 
 app.get("/draw", (req, res) => {
     if (!req.session.userId) return res.redirect("/");
-    res.sendFile("draw.html", { root: "public" });
+    res.sendFile(path.join(__dirname, "public/draw.html"));
 });
 
-app.get("/view/:id", (req, res) => {
+app.get("/view/:id", async (req, res) => {
     if (!req.session.userId) return res.redirect("/");
 
-    db.get(
-        `SELECT * FROM drawings WHERE id = ?`,
-        [req.params.id],
-        (err, row) => {
-            if (!row) return res.status(404).send("Рисунок не найден");
-            if (row.userId === req.session.userId) {
-                return res.redirect("/dashboard");
-            }
-            res.sendFile("view.html", { root: "public" });
-        }
+    const { rows } = await pool.query(
+        "SELECT * FROM drawings WHERE id = $1",
+        [req.params.id]
     );
+
+    if (!rows.length) return res.status(404).send("Not found");
+
+    if (rows[0].user_id === req.session.userId) {
+        return res.redirect("/dashboard");
+    }
+
+    res.sendFile(path.join(__dirname, "public/view.html"));
 });
 
 /* ---------------- Auth ---------------- */
@@ -108,196 +120,143 @@ app.post("/register", async (req, res) => {
     if (!nickname || !password) return res.status(400).send("Ошибка");
 
     const hash = await bcrypt.hash(password, 10);
-    db.run(
-        `INSERT INTO users (nickname, password) VALUES (?, ?)`,
-        [nickname, hash],
-        function (err) {
-            if (err) return res.status(400).send("Ник занят");
-            req.session.userId = this.lastID;
-            res.redirect("/dashboard");
-        }
-    );
+
+    try {
+        const { rows } = await pool.query(
+            "INSERT INTO users (nickname, password) VALUES ($1,$2) RETURNING id",
+            [nickname, hash]
+        );
+        req.session.userId = rows[0].id;
+        res.redirect("/dashboard");
+    } catch {
+        res.status(400).send("Ник занят");
+    }
 });
 
-app.post("/login", (req, res) => {
+app.post("/login", async (req, res) => {
     const { nickname, password } = req.body;
 
-    db.get(
-        `SELECT * FROM users WHERE nickname = ?`,
-        [nickname],
-        async (err, user) => {
-            if (!user) return res.status(400).send("Нет пользователя");
-            const ok = await bcrypt.compare(password, user.password);
-            if (!ok) return res.status(400).send("Неверный пароль");
-
-            req.session.userId = user.id;
-            res.redirect("/dashboard");
-        }
+    const { rows } = await pool.query(
+        "SELECT * FROM users WHERE nickname=$1",
+        [nickname]
     );
+
+    if (!rows.length) return res.status(400).send("Нет пользователя");
+
+    const ok = await bcrypt.compare(password, rows[0].password);
+    if (!ok) return res.status(400).send("Неверный пароль");
+
+    req.session.userId = rows[0].id;
+    res.redirect("/dashboard");
 });
 
 /* ---------------- API ---------------- */
 
-app.post("/api/draw", (req, res) => {
-    if (!req.session.userId) {
+app.get("/api/words", (_, res) => {
+    res.json({ words: getRandomWords(WORDS.easy, 3) });
+});
+
+app.post("/api/draw", async (req, res) => {
+    if (!req.session.userId)
         return res.status(401).json({ error: "Не авторизован" });
-    }
 
     const { timeline, word } = req.body;
-    if (!timeline || !word) {
+    if (!timeline || !word)
         return res.status(400).json({ error: "Плохие данные" });
-    }
 
     const id = uuidv4();
 
-    db.run(
-        `INSERT INTO drawings (id, userId, timeline, word)
-         VALUES (?, ?, ?, ?)`,
-        [id, req.session.userId, JSON.stringify(timeline), word],
-        err => {
-            if (err) return res.status(500).json({ error: err.message });
-            res.json({ id });
-        }
+    await pool.query(
+        `
+        INSERT INTO drawings (id, user_id, timeline, word)
+        VALUES ($1,$2,$3,$4)
+        `,
+        [id, req.session.userId, timeline, word]
     );
+
+    res.json({ id });
 });
 
-app.get("/api/draw/:id", (req, res) => {
+app.get("/api/draw/:id", async (req, res) => {
     const userId = req.session.userId;
 
-    db.get(
-        `SELECT * FROM drawings WHERE id = ?`,
-        [req.params.id],
-        (err, row) => {
-            if (!row) {
-                return res.status(404).json({ error: "Не найдено" });
-            }
-
-            const response = {
-                timeline: JSON.parse(row.timeline)
-            };
-
-            // слово отдаём ТОЛЬКО автору
-            if (userId && row.userId === userId) {
-                response.word = row.word;
-            }
-
-            res.json(response);
-        }
+    const { rows } = await pool.query(
+        "SELECT * FROM drawings WHERE id=$1",
+        [req.params.id]
     );
-});
 
-app.get("/api/available-drawings", (req, res) => {
-    if (!req.session.userId) {
-        return res.status(401).json({ error: "Не авторизован" });
+    if (!rows.length)
+        return res.status(404).json({ error: "Не найдено" });
+
+    const drawing = rows[0];
+
+    const response = { timeline: drawing.timeline };
+
+    if (userId && drawing.user_id === userId) {
+        response.word = drawing.word;
     }
 
-    db.all(
-        `
-        SELECT drawings.id, users.nickname
-        FROM drawings
-        JOIN users ON drawings.userId = users.id
-        WHERE drawings.userId != ?
-          AND guessedBy NOT LIKE ?
-        `,
-        [req.session.userId, `%${req.session.userId}%`],
-        (err, rows) => res.json(rows)
-    );
+    res.json(response);
 });
 
-app.post("/api/guess/:id", (req, res) => {
+app.post("/api/guess/:id", async (req, res) => {
     const userId = req.session.userId;
     const { guess } = req.body;
 
     if (!userId) return res.status(401).json({ error: "Не авторизован" });
 
-    db.get(
-        `SELECT * FROM drawings WHERE id = ?`,
-        [req.params.id],
-        (err, row) => {
-            if (!row) return res.status(404).json({ error: "Не найдено" });
-
-            let guessedBy = [];
-            try {
-                guessedBy = JSON.parse(row.guessedBy || "[]");
-            } catch {
-                guessedBy = [];
-            }
-
-            if (row.userId === userId) {
-                return res.status(403).json({ error: "Свой рисунок" });
-            }
-
-            if (guessedBy.includes(userId)) {
-                return res.status(403).json({ error: "Уже угадал" });
-            }
-
-            const correct =
-                row.word.toLowerCase() === guess.toLowerCase();
-
-            if (correct) {
-                guessedBy.push(userId);
-
-                db.run(
-                    `UPDATE drawings SET guessedBy = ? WHERE id = ?`,
-                    [JSON.stringify(guessedBy), req.params.id]
-                );
-
-                db.run(
-                    `UPDATE users SET points = points + 1 WHERE id = ?`,
-                    [userId]
-                );
-
-                db.run(
-                    `UPDATE users SET points = points + 1 WHERE id = ?`,
-                    [row.userId]
-                );
-            }
-
-            res.json({ correct });
-        }
+    const { rows } = await pool.query(
+        "SELECT * FROM drawings WHERE id=$1",
+        [req.params.id]
     );
-});
 
-app.get("/api/my-drawings", (req, res) => {
-    if (!req.session.userId) {
-        return res.status(401).json({ error: "Не авторизован" });
+    if (!rows.length)
+        return res.status(404).json({ error: "Не найдено" });
+
+    const d = rows[0];
+
+    if (d.user_id === userId)
+        return res.status(403).json({ error: "Свой рисунок" });
+
+    const guessedBy = d.guessed_by || [];
+    if (guessedBy.includes(userId))
+        return res.status(403).json({ error: "Уже угадал" });
+
+    const correct = d.word.toLowerCase() === guess.toLowerCase();
+
+    if (correct) {
+        guessedBy.push(userId);
+
+        await pool.query(
+            "UPDATE drawings SET guessed_by=$1 WHERE id=$2",
+            [guessedBy, req.params.id]
+        );
+
+        await pool.query(
+            "UPDATE users SET points=points+1 WHERE id=$1",
+            [userId]
+        );
+
+        await pool.query(
+            "UPDATE users SET points=points+1 WHERE id=$1",
+            [d.user_id]
+        );
     }
 
-    db.all(
-        `
-        SELECT id, word, createdAt
-        FROM drawings
-        WHERE userId = ?
-        ORDER BY createdAt DESC
-        `,
-        [req.session.userId],
-        (err, rows) => res.json(rows)
-    );
+    res.json({ correct });
 });
 
-app.get("/leaderboard", (req, res) => {
-    db.all(
-        `SELECT nickname, points FROM users ORDER BY points DESC LIMIT 10`,
-        (err, rows) => res.json(rows)
+/* ---------------- Leaderboard ---------------- */
+
+app.get("/leaderboard", async (_, res) => {
+    const { rows } = await pool.query(
+        "SELECT nickname, points FROM users ORDER BY points DESC LIMIT 10"
     );
+    res.json(rows);
 });
+
+/* ---------------- Start ---------------- */
 
 app.listen(PORT, () =>
-    console.log(`Сервер запущен: http://localhost:${PORT}`)
+    console.log(`🚀 Server running on port ${PORT}`)
 );
-
-app.get("/word", (req, res) => {
-    const word = WORDS[Math.floor(Math.random() * WORDS.length)];
-    res.json({ word });
-});
-
-function getRandomWords(arr, count = 3) {
-    const shuffled = [...arr].sort(() => 0.5 - Math.random());
-    return shuffled.slice(0, count);
-}
-
-app.get("/api/words", (req, res) => {
-    const pool = WORDS.easy; // пока только easy
-    const words = getRandomWords(pool, 3);
-    res.json({ words });
-});
